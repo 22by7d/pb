@@ -169,4 +169,4 @@ class ChainlinkPriceFeed:
         while self._tick_deque and self._tick_deque[0][0] < cutoff:
             self._tick_deque.popleft()
 
-        logger.info(f"BTC/USD: ${price:,.2f} (age: {self.last_update_age:.1f}s)")  # TEMP: was debug
+        logger.debug(f"BTC/USD: ${price:,.2f} (age: {self.last_update_age:.1f}s)")
