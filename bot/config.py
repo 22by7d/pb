@@ -19,6 +19,7 @@ RTDS_WS_URL = "wss://ws-live-data.polymarket.com"
 # --- Timing ---
 MARKET_POLL_INTERVAL = 60       # seconds between market discovery polls
 CHAINLINK_STALE_THRESHOLD = 5   # seconds — if no update for this long, mark feed unavailable
+TICK_BUFFER_SECS = 90           # deque retention window (90s to give 60s of clean data with margin)
 SETTLEMENT_POLL_INTERVAL = 15   # seconds between outcome checks
 SETTLEMENT_POLL_TIMEOUT = 300   # max seconds to wait for resolution
 

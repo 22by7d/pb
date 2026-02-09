@@ -3,10 +3,11 @@ import json
 import ssl
 import time
 import logging
+from collections import deque
 
 import websockets
 
-from bot.config import RTDS_WS_URL, CHAINLINK_STALE_THRESHOLD
+from bot.config import RTDS_WS_URL, CHAINLINK_STALE_THRESHOLD, TICK_BUFFER_SECS
 
 # SSL context for local dev (macOS cert issues)
 _ssl_ctx = ssl.create_default_context()
@@ -24,6 +25,7 @@ class ChainlinkPriceFeed:
         self._timestamp: float = 0  # unix timestamp of last update
         self._connected = False
         self._ws = None
+        self._tick_deque: deque[tuple[float, float]] = deque()  # (timestamp, price)
 
     @property
     def price(self) -> float | None:
@@ -44,6 +46,11 @@ class ChainlinkPriceFeed:
     @property
     def is_available(self) -> bool:
         return self.price is not None
+
+    def get_recent_ticks(self, seconds: int = 60) -> list[dict]:
+        """Return ticks from the last N seconds as [{"ts": ..., "price": ...}, ...]."""
+        cutoff = time.time() - seconds
+        return [{"ts": ts, "price": p} for ts, p in self._tick_deque if ts >= cutoff]
 
     async def run(self):
         """Connect and subscribe to Chainlink BTC/USD. Reconnects on failure."""
@@ -148,4 +155,11 @@ class ChainlinkPriceFeed:
 
         self._price = price
         self._timestamp = ts if ts else time.time()
+
+        # Append to rolling tick deque and prune entries older than buffer window
+        self._tick_deque.append((self._timestamp, price))
+        cutoff = time.time() - TICK_BUFFER_SECS
+        while self._tick_deque and self._tick_deque[0][0] < cutoff:
+            self._tick_deque.popleft()
+
         logger.debug(f"BTC/USD: ${price:,.2f} (age: {self.last_update_age:.1f}s)")

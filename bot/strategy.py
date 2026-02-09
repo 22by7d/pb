@@ -46,10 +46,10 @@ async def run_market(market: dict, price_feed: ChainlinkPriceFeed, fetch_outcome
     distance = abs(price - beat_price)
 
     if distance > DISTANCE_MAX:
-        _log_skip(market, beat_price, "distance_too_large", distance, price)
+        _log_skip(market, beat_price, "distance_too_large", distance, price, price_feed)
         return
     if distance < DISTANCE_MIN:
-        _log_skip(market, beat_price, "distance_too_small", distance, price)
+        _log_skip(market, beat_price, "distance_too_small", distance, price, price_feed)
         return
 
     logger.info(f"[{market_slug}] ACTIVE — distance ${distance:.2f}, tracking for {TRACKING_START_SECS - 1}s")
@@ -64,7 +64,8 @@ async def run_market(market: dict, price_feed: ChainlinkPriceFeed, fetch_outcome
             await asyncio.sleep(target_ts - now_ts)
 
         if not price_feed.is_available:
-            _log_skip(market, beat_price, "chainlink_lost_during_tracking", distance)
+            _log_skip(market, beat_price, "chainlink_lost_during_tracking", distance,
+                      price_feed=price_feed)
             return
 
         price = price_feed.price
@@ -80,7 +81,7 @@ async def run_market(market: dict, price_feed: ChainlinkPriceFeed, fetch_outcome
 
         # Safety: abort if distance drops below minimum
         if distance < DISTANCE_MIN:
-            _log_skip(market, beat_price, "unstable_during_tracking", distance, price)
+            _log_skip(market, beat_price, "unstable_during_tracking", distance, price, price_feed)
             return
 
     # Phase: DECISION — last sample before close
@@ -125,6 +126,7 @@ async def run_market(market: dict, price_feed: ChainlinkPriceFeed, fetch_outcome
         "simulated_shares": SIMULATED_SHARES,
         "buy_price": BUY_PRICE,
         "price_samples": prices,
+        "price_ticks": price_feed.get_recent_ticks(60),
     }
     log_entry(entry)
 
@@ -148,7 +150,9 @@ async def _poll_outcome(market_id: str, fetch_outcome_fn) -> str | None:
     return None
 
 
-def _log_skip(market: dict, beat_price: float, reason: str, distance: float, current_price: float | None = None):
+def _log_skip(market: dict, beat_price: float, reason: str, distance: float,
+               current_price: float | None = None,
+               price_feed: ChainlinkPriceFeed | None = None):
     """Log a SKIP entry."""
     entry = {
         "market_id": market["id"],
@@ -159,6 +163,7 @@ def _log_skip(market: dict, beat_price: float, reason: str, distance: float, cur
         "skip_reason": reason,
         "distance_at_decision": round(distance, 2),
         "current_price": current_price,
+        "price_ticks": price_feed.get_recent_ticks(60) if price_feed else None,
     }
     log_entry(entry)
     logger.info(f"[{market.get('slug', 'unknown')}] SKIP — {reason} (dist: ${distance:.2f})")

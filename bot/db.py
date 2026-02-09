@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS markets (
     simulated_shares INTEGER,
     buy_price REAL,
     price_samples TEXT,
+    price_ticks TEXT,
     logged_at TEXT DEFAULT (datetime('now'))
 )
 """
@@ -43,7 +44,7 @@ INSERT INTO markets (
     price_at_T14_31, price_at_T14_45, price_at_T14_55, price_at_T14_58, price_at_T14_59,
     current_price, distance_at_T14_31, distance_at_decision,
     would_buy, actual_outcome, would_have_won, theoretical_pnl,
-    simulated_shares, buy_price, price_samples
+    simulated_shares, buy_price, price_samples, price_ticks
 ) VALUES (
     :market_id, :market_slug, :start_time, :end_time, :beat_price,
     :price_before_beat, :price_after_beat,
@@ -51,7 +52,7 @@ INSERT INTO markets (
     :price_at_T14_31, :price_at_T14_45, :price_at_T14_55, :price_at_T14_58, :price_at_T14_59,
     :current_price, :distance_at_T14_31, :distance_at_decision,
     :would_buy, :actual_outcome, :would_have_won, :theoretical_pnl,
-    :simulated_shares, :buy_price, :price_samples
+    :simulated_shares, :buy_price, :price_samples, :price_ticks
 )
 ON CONFLICT(market_id) DO UPDATE SET
     market_slug      = COALESCE(excluded.market_slug, markets.market_slug),
@@ -76,7 +77,8 @@ ON CONFLICT(market_id) DO UPDATE SET
     theoretical_pnl  = COALESCE(excluded.theoretical_pnl, markets.theoretical_pnl),
     simulated_shares = COALESCE(excluded.simulated_shares, markets.simulated_shares),
     buy_price        = COALESCE(excluded.buy_price, markets.buy_price),
-    price_samples    = COALESCE(excluded.price_samples, markets.price_samples)
+    price_samples    = COALESCE(excluded.price_samples, markets.price_samples),
+    price_ticks      = COALESCE(excluded.price_ticks, markets.price_ticks)
 """
 
 # Column names expected in the upsert (order must match _UPSERT placeholders)
@@ -87,7 +89,7 @@ _COLUMNS = [
     "price_at_T14_31", "price_at_T14_45", "price_at_T14_55", "price_at_T14_58", "price_at_T14_59",
     "current_price", "distance_at_T14_31", "distance_at_decision",
     "would_buy", "actual_outcome", "would_have_won", "theoretical_pnl",
-    "simulated_shares", "buy_price", "price_samples",
+    "simulated_shares", "buy_price", "price_samples", "price_ticks",
 ]
 
 
@@ -103,6 +105,11 @@ def init_db():
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute(_CREATE_TABLE)
         conn.execute("CREATE INDEX IF NOT EXISTS idx_markets_logged_at ON markets(logged_at)")
+        # Migration: add price_ticks column to existing DBs
+        try:
+            conn.execute("ALTER TABLE markets ADD COLUMN price_ticks TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists (fresh DB or already migrated)
         conn.commit()
     finally:
         conn.close()
@@ -114,7 +121,7 @@ def upsert_market(entry: dict):
     params = {}
     for col in _COLUMNS:
         val = entry.get(col)
-        if col == "price_samples" and val is not None and not isinstance(val, str):
+        if col in ("price_samples", "price_ticks") and val is not None and not isinstance(val, str):
             val = json.dumps(val, default=str)
         # Convert booleans to int for would_have_won
         if col == "would_have_won" and isinstance(val, bool):
