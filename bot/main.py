@@ -5,7 +5,10 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
-from bot.config import LOG_DIR
+from aiohttp import web
+
+from bot.config import DASHBOARD_PORT, LOG_DIR
+from bot.dashboard import create_dashboard_app
 from bot.db import init_db
 from bot.logger import load_logged_market_ids, log_entry
 from bot.market_discovery import discover_markets, fetch_market_outcome, poll_markets_loop
@@ -56,6 +59,14 @@ async def main():
 
     # Track active market tasks
     active_tasks: dict[str, asyncio.Task] = {}
+
+    # Start web dashboard
+    dashboard_app = create_dashboard_app(price_feed, active_tasks)
+    runner = web.AppRunner(dashboard_app)
+    await runner.setup()
+    site = web.TCPSite(runner, "0.0.0.0", DASHBOARD_PORT)
+    await site.start()
+    logger.info(f"Dashboard running on http://0.0.0.0:{DASHBOARD_PORT}")
 
     async def on_new_market(market: dict):
         """Called when a new BTC 15-min market is discovered."""

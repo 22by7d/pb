@@ -47,6 +47,14 @@ class ChainlinkPriceFeed:
     def is_available(self) -> bool:
         return self.price is not None
 
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    @property
+    def tick_count(self) -> int:
+        return len(self._tick_deque)
+
     def get_recent_ticks(self, seconds: int = 60) -> list[dict]:
         """Return ticks from the last N seconds as [{"ts": ..., "price": ...}, ...]."""
         cutoff = time.time() - seconds

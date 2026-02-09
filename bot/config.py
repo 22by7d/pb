@@ -30,3 +30,6 @@ DB_PATH = os.path.join(LOG_DIR, "polybot.db")
 # --- Telegram (optional) ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# --- Dashboard ---
+DASHBOARD_PORT = int(os.environ.get("PORT", 8080))
