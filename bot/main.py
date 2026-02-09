@@ -76,9 +76,19 @@ async def main():
                     # Market already started — use current Chainlink price as approximate beat_price
                     # This is imprecise for markets we discover mid-session
                     market["beat_price"] = price_feed.price
+                    if market["beat_price"] is None:
+                        logger.warning(f"[{slug}] No Chainlink price available. Logging as SKIP.")
+                        log_entry({
+                            "market_id": market_id,
+                            "market_slug": slug,
+                            "end_time": market["end_time"].isoformat(),
+                            "decision": "SKIP",
+                            "skip_reason": "chainlink_unavailable_at_open",
+                        })
+                        return
                     logger.warning(
                         f"[{slug}] Market already started. Using current price "
-                        f"${price_feed.price:,.2f} as approximate beat_price"
+                        f"${market['beat_price']:,.2f} as approximate beat_price"
                     )
                 else:
                     # Capture prices at T-1s, T+0 (beat_price), T+1s
@@ -90,6 +100,16 @@ async def main():
                     market["beat_price"] = price_feed.price
                     await asyncio.sleep(1)
                     market["price_after_beat"] = price_feed.price
+                    if None in (market["price_before_beat"], market["beat_price"], market["price_after_beat"]):
+                        logger.warning(f"[{slug}] Price feed died during beat capture. Logging as SKIP.")
+                        log_entry({
+                            "market_id": market_id,
+                            "market_slug": slug,
+                            "end_time": market["end_time"].isoformat(),
+                            "decision": "SKIP",
+                            "skip_reason": "chainlink_lost_during_beat_capture",
+                        })
+                        return
                     logger.info(
                         f"[{slug}] Beat: ${market['beat_price']:,.2f} "
                         f"(T-1: ${market['price_before_beat']:,.2f}, "

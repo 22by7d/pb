@@ -88,7 +88,14 @@ class ChainlinkPriceFeed:
             logger.info("Subscribed to crypto_prices_chainlink")
 
             ping_counter = 0
-            async for message in ws:
+            while True:
+                try:
+                    message = await asyncio.wait_for(ws.recv(), timeout=30)
+                except asyncio.TimeoutError:
+                    logger.warning("No WS message for 30s — forcing reconnect")
+                    self._connected = False
+                    raise ConnectionError("WS receive timeout")
+
                 # Skip binary or empty messages
                 if isinstance(message, bytes) or not message.strip():
                     continue
