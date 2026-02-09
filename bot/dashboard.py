@@ -51,7 +51,8 @@ def _query_today_sessions() -> list[dict]:
         try:
             conn.row_factory = sqlite3.Row
             cur = conn.execute(
-                "SELECT market_slug, beat_price, decision, skip_reason, "
+                "SELECT market_slug, start_time, end_time, beat_price, "
+                "decision, skip_reason, "
                 "distance_at_decision, would_buy, actual_outcome, "
                 "would_have_won, theoretical_pnl, logged_at "
                 "FROM markets WHERE logged_at > datetime('now', '-1 day') "
@@ -159,8 +160,8 @@ _HTML = """\
 <table>
   <thead>
     <tr>
-      <th>Slug</th><th>Beat</th><th>Decision</th><th>Reason/Side</th>
-      <th>Dist</th><th>Outcome</th><th>Result</th><th>P&amp;L</th><th>Time</th>
+      <th>Session</th><th>Beat</th><th>Decision</th><th>Reason/Side</th>
+      <th>Dist</th><th>Outcome</th><th>Result</th><th>P&amp;L</th>
     </tr>
   </thead>
   <tbody id="sessions-body"></tbody>
@@ -175,6 +176,18 @@ _HTML = """\
     const d = document.createElement('div');
     d.appendChild(document.createTextNode(s));
     return d.innerHTML;
+  }
+
+  function fmtSession(startStr, endStr) {
+    if (!startStr || !endStr) return '—';
+    const s = new Date(startStr), e = new Date(endStr);
+    if (isNaN(s) || isNaN(e)) return '—';
+    const et = {timeZone:'America/New_York'};
+    const mo = s.toLocaleString('en-US',{...et,month:'short'});
+    const day = s.toLocaleString('en-US',{...et,day:'numeric'});
+    const sh = s.toLocaleString('en-US',{...et,hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');
+    const eh = e.toLocaleString('en-US',{...et,hour:'numeric',minute:'2-digit',hour12:true}).replace(' ','');
+    return mo + ' ' + day + ', ' + sh + '-' + eh + ' ET';
   }
 
   // ── Health polling ──────────────────────────────────────
@@ -306,11 +319,13 @@ _HTML = """\
       const reasonOrSide = isActive ? (r.would_buy || '—') : (r.skip_reason || '—');
       const dist = r.distance_at_decision != null ? r.distance_at_decision.toFixed(0) : '—';
       const beat = r.beat_price != null ? '$' + Number(r.beat_price).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—';
-      const slug = esc((r.market_slug || '').replace(/^will-the-price-of-/,'').substring(0,40));
-      const ts = r.logged_at ? r.logged_at.substring(11,19) : '';
+      const session = fmtSession(r.start_time, r.end_time);
+
+      const slug = r.market_slug || '';
+      const href = slug ? 'https://polymarket.com/event/' + encodeURIComponent(slug) : '';
 
       return '<tr>' +
-        '<td>' + slug + '</td>' +
+        '<td>' + (href ? '<a href="' + href + '" target="_blank" style="color:#58a6ff;text-decoration:none">' + esc(session) + '</a>' : esc(session)) + '</td>' +
         '<td>' + beat + '</td>' +
         '<td class="' + decCls + '">' + esc(dec) + '</td>' +
         '<td>' + esc(reasonOrSide) + '</td>' +
@@ -318,7 +333,6 @@ _HTML = """\
         '<td>' + esc(r.actual_outcome || '—') + '</td>' +
         '<td>' + result + '</td>' +
         '<td>' + pnlStr + '</td>' +
-        '<td>' + ts + '</td>' +
         '</tr>';
     }).join('');
 
